@@ -1,5 +1,5 @@
 pub mod cd;
-pub mod help;
-pub mod ls;
 pub mod echo;
+pub mod ls;
+
 mod option_parser;

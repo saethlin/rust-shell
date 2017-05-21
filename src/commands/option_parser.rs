@@ -7,12 +7,12 @@ pub fn parse(args: Vec<String>) -> (Vec<String>, Vec<String>) {
         let i: &str = item.as_ref();
         if i.starts_with("--") {
 
-            let split: Vec<String> = i.split("=").map(|x| x.to_string()).collect();
+            let split: Vec<String> = i.split('=').map(|x| x.to_string()).collect();
             let key = split[0].chars().skip(2).collect::<String>();
             let value = split[1].to_string();
             options.push(key);
             options.push(value);
-        } else if i.starts_with("-") {
+        } else if i.starts_with('-') {
             let chars = i.chars().skip(1);
             let string: String = chars.collect::<String>();
             options.push(string.to_string());

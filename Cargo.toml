@@ -2,3 +2,8 @@
 name = "rust-shell"
 version = "0.1.0"
 authors = ["Mahdi Dibaiee <mdibaiee@aol.com>"]
+
+[dependencies]
+"hostname" = "*"
+"term" = "*"
+"term_size" = "*"

@@ -1,34 +1,34 @@
 use super::option_parser::parse;
-use std::str::FromStr;
+use state::ShellState;
 
-pub fn exec(args: Vec<String>) {
-    let (options, mut params) = parse(args);
+pub fn exec(state: &ShellState, args: Vec<String>) {
+    let (_, params) = parse(args);
 
-    for param in params.iter_mut() {
-        param.push_str("\n");
+    if params.is_empty() {
+        println!();
     }
+    else {
+        if params[0].starts_with('$') {
+            let (_, key) = params[0].split_at(1);
+            if let Some(val) = state.variables.get(key) {
+                print!("{}", val);
+            }
+        }
+        else {
+            print!("{}", params[0]);
+        }
 
-    let mut options_iter = options.iter();
-    let break_option = options_iter.position(|x| *x == "break".to_string());
-
-    let add_break: u32 = match break_option {
-        Some(..) => u32::from_str(options_iter.next().unwrap()).unwrap(),
-        None => 0u32
-    };
-
-    for i in 0..add_break {
-        println!("");
-    };
-
-    let message: String = params.iter().map(|x| x.as_ref()).collect();
-
-    println!("{}", message);
-}
-
-pub fn help() {
-    println!(" Prints out stuff\n
- usage: echo <line1> <line2> ... <lineN>\n\n
-
- Options:\n
-    --break=n   Adds |n| line breaks before message\n");
+        for param in params.iter().skip(1) {
+            if param.starts_with('$') {
+                let (_, key) = param.split_at(1);
+                if let Some(val) = state.variables.get(key) {
+                    print!(" {}", val);
+                }
+            }
+            else {
+                print!(" {}", param);
+            }
+        }
+        println!();
+    }
 }
