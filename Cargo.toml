@@ -1,9 +1,9 @@
 [package]
 name = "rust-shell"
 version = "0.1.0"
-authors = ["Mahdi Dibaiee <mdibaiee@aol.com>"]
+authors = ["Ben Kimock"]
 
 [dependencies]
-"hostname" = "*"
-"term" = "*"
-"term_size" = "*"
+hostname = "*"
+term = "*"
+term_size = "*"

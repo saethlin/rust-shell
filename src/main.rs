@@ -1,10 +1,10 @@
+#![feature(iterator_step_by)]
 extern crate rust_shell as shell;
 extern crate hostname;
 extern crate term;
 
 use shell::commands;
 use std::io;
-use std::process::Command;
 use std::str;
 use hostname::get_hostname;
 use std::path::{PathBuf, Path};
@@ -38,7 +38,7 @@ fn main() {
             //"rm" => commands::rm::exec(&state, args),
             //"touch" => commands::rm::exec(&state, args),
             //"grep" => commands::grep::exec(&state, args),
-            _ => run_command(&state, cmd, &args)
+            _ => run_command(&state, &cmd, &args)
         };
     }
 }
@@ -61,15 +61,14 @@ fn prompt(state: &ShellState) {
     write!(t, "\n╰ ➤ ").unwrap();
     t.reset().unwrap();
 
-    io::stdout().flush().unwrap();    // Flush to ensure stdout is printed immediately
+    io::stdout().flush().unwrap(); // Flush to ensure stdout is printed immediately
 }
 
 fn read(state: &ShellState) -> (String, Vec<String>) {
     prompt(state);
     let mut line = "".to_string();
     io::stdin().read_line(&mut line).unwrap();
-    // Last character is a line-break we don't need
-    line.pop();
+    line.pop(); // Last character is a line-break we don't need
 
     let params: Vec<String> = line.split(' ').map(|x| x.to_string()).collect();
     let mut iter = params.into_iter();
@@ -80,17 +79,14 @@ fn read(state: &ShellState) -> (String, Vec<String>) {
     (cmd, rest)
 }
 
-fn run_command(state: &ShellState, command: String, args: &[String]) -> () {
-    println!("External command invoked");
+fn run_command(state: &ShellState, command: &str, args: &[String]) {
+    use std::process::Command;
     match Command::new(command)
         .args(args)
         .current_dir(state.directory.clone())
-        .output() {
-            Ok(out) => {
-                println!("{}", str::from_utf8(&out.stdout).unwrap());
-            },
-            Err(e) => {
-                println!("Error: {}", e);
-            }
-        }
+        .spawn()
+        {
+        Ok(mut child) => {child.wait().unwrap(); ()},
+        Err(_) => println!("command not found: {}", command),
+    };
 }
