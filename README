@@ -1,5 +1,3 @@
 Simple shell written in Rust
 
-I've wrote this to learn Rust. You should not use it.
-
-I've wrote comments here and there in case you're interested. :+1:
+Goal is to implement the most useful bits of the GNU coreutils directly in Rust, compiled into the shell itself.
