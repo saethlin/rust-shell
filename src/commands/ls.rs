@@ -1,10 +1,11 @@
+extern crate std;
 extern crate term_size;
 use std::path::Path;
 use std::fs;
 use super::option_parser::parse;
 use state::ShellState;
 
-pub fn exec(state: &ShellState, args: Vec<String>) {
+pub fn exec(state: &ShellState, args: std::str::SplitWhitespace) {
     let (options, params) = parse(args);
 
     let dir: &Path = if !params.is_empty() {

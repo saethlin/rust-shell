@@ -1,7 +1,8 @@
+extern crate std;
 use super::option_parser::parse;
 use state::ShellState;
 
-pub fn exec(state: &ShellState, args: Vec<String>) {
+pub fn exec(state: &ShellState, args: std::str::SplitWhitespace) {
     let (_, params) = parse(args);
 
     if params.is_empty() {

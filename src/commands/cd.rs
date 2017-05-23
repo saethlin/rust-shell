@@ -1,8 +1,10 @@
+extern crate std;
+
 use std::path::Path;
 use std::fs;
 use state::ShellState;
 
-pub fn exec(state: &mut ShellState, args: &[String]) {
+pub fn exec(state: &mut ShellState, args: std::str::SplitWhitespace) {
     if args.is_empty() {
         state.directory = Path::new(&state.variables["HOME"]).to_owned();
         return;

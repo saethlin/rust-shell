@@ -1,92 +1,116 @@
-#![feature(iterator_step_by)]
 extern crate rust_shell as shell;
 extern crate hostname;
 extern crate term;
 
-use shell::commands;
 use std::io;
+use std::io::Write;
 use std::str;
 use hostname::get_hostname;
 use std::path::{PathBuf, Path};
 use std::collections::HashMap;
+use shell::commands;
 use shell::state::ShellState;
 
 fn main() {
-    // TODO: Search PATH for something to run if unknown
-    // TODO: Read some config file to get things like the home directory
     // TODO: Tab completion
     // TODO: Syntax highlighting
-    // TODO: proper ls formatting
+    // TODO: Fix ls column number detection
+    // TODO: Add colors to ls output
+    // TODO: Read some config file to get things like the home directory
+    // TODO: Semicolons between command on a single line
+    // TODO: Pipes and output redirection
     let mut state = ShellState {
         directory: PathBuf::new(),
-        user: "ben".to_string(),
+        user: "ben".to_owned(),
         hostname: get_hostname().unwrap(),
         variables: HashMap::new(),
+        input_buffer: String::new(),
+        output_buffer: String::new(),
     };
     state.variables.insert("HOME".to_owned(), "/home/ben".to_owned());
     state.variables.insert("PATH".to_owned(), "/usr/bin:/bin:".to_owned());
+    state.variables.insert("SHELL".to_owned(), "rsh".to_owned());
     state.directory = Path::new(&state.variables["HOME"]).to_path_buf();
 
     loop {
-        let (cmd, args) = read(&state);
+        let mut args = read(&mut state);
+        let cmd = args.next().unwrap_or("");
+        let args = args;
 
         match cmd.as_ref() {
             "" => print!(""),
-            "cd" => commands::cd::exec(&mut state, &args),
-            "ls" => commands::ls::exec(&state, args),
-            "echo" => commands::echo::exec(&state, args),
+            "cd" | "dir" => commands::cd::exec(&mut state, args),
+            //"cp" => commands::cp::exec(&state, args),
+            //"echo" => commands::echo::exec(&state, args),
+            //"grep" => commands::grep::exec(&state, args),
+            //"ls" => commands::ls::exec(&state, args),
+            //"mkdir"
+            //"mv"
             //"rm" => commands::rm::exec(&state, args),
             //"touch" => commands::rm::exec(&state, args),
-            //"grep" => commands::grep::exec(&state, args),
-            _ => run_command(&state, &cmd, &args)
+            _ => run_command(&state, &cmd, args)
         };
     }
 }
 
 fn prompt(state: &ShellState) {
-    use std::io::prelude::*;
+    #![allow(unused)]
     let mut t = term::stdout().unwrap();
 
-    t.fg(term::color::BRIGHT_WHITE).unwrap();
+    t.fg(term::color::BRIGHT_WHITE);
     write!(t, "╭").unwrap();
-    t.fg(term::color::BRIGHT_RED).unwrap();
-    t.attr(term::Attr::Bold).unwrap();
+    t.fg(term::color::BRIGHT_RED);
+    t.attr(term::Attr::Bold);
     write!(t, " ➜ ").unwrap();
-    t.fg(term::color::BRIGHT_GREEN).unwrap();
+    t.fg(term::color::BRIGHT_GREEN);
     write!(t, "{}@{}:", state.user, state.hostname).unwrap();
-    t.fg(term::color::BRIGHT_CYAN).unwrap();
+    t.fg(term::color::BRIGHT_CYAN);
     write!(t, "{}", state.directory.to_string_lossy()).unwrap();
-    t.fg(term::color::BRIGHT_WHITE).unwrap();
-    t.attr(term::Attr::Bold).unwrap();
+    t.fg(term::color::BRIGHT_WHITE);
+    t.attr(term::Attr::Bold);
     write!(t, "\n╰ ➤ ").unwrap();
     t.reset().unwrap();
 
     io::stdout().flush().unwrap(); // Flush to ensure stdout is printed immediately
 }
 
-fn read(state: &ShellState) -> (String, Vec<String>) {
+fn read(state: &mut ShellState) -> std::str::SplitWhitespace {
     prompt(state);
-    let mut line = "".to_string();
-    io::stdin().read_line(&mut line).unwrap();
-    line.pop(); // Last character is a line-break we don't need
 
-    let params: Vec<String> = line.split(' ').map(|x| x.to_string()).collect();
-    let mut iter = params.into_iter();
+    state.input_buffer.clear();
+    if let Ok(status) = io::stdin().read_line(&mut state.input_buffer) {
+        if status == 0 {
+            print!("\r\n");
+            io::stdout().flush().unwrap();
+            std::process::exit(0);
+        }
 
-    let cmd = iter.next().unwrap();
-    let rest: Vec<String> = iter.collect();
-
-    (cmd, rest)
+        return state.input_buffer.split_whitespace();
+    }
+    else {
+        return "".split_whitespace()
+    }
 }
 
-fn run_command(state: &ShellState, command: &str, args: &[String]) {
+fn run_command(state: &ShellState, command: &str, args: std::str::SplitWhitespace) {
     use std::process::Command;
-    match Command::new(command)
-        .args(args)
-        .current_dir(state.directory.clone())
-        .spawn()
-        {
-        Ok(mut child) => {child.wait().unwrap(); ()},
-        Err(_) => println!("command not found: {}", command),
-    };
+    use std::fs;
+
+    for entries in state.variables["PATH"].split(':')
+        .map(|dir| fs::read_dir(Path::new(dir)))
+        .filter_map(|e| e.ok()) { // loop over the iterator of every directory in PATH that's possible to read
+        for dir_entry in entries
+            .filter_map(|e| e.ok()) // Only entries that are ok
+            .filter(|e| &e.file_name() == command) { // Check if entry filename matches
+            match Command::new(dir_entry.path())
+                .args(args)
+                .current_dir(state.directory.clone())
+                .spawn() {
+                Ok(mut child) => {child.wait().unwrap_or_else(|e| println!("command failed to launch: {}", command); 0)},
+                Err(e) => {println!("command failed to launch: {}", command); 0},
+            };
+            return;
+        }
+    }
+    println!("command not found: {}", command);
 }

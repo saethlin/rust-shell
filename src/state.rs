@@ -6,4 +6,6 @@ pub struct ShellState {
     pub user: String,
     pub hostname: String,
     pub variables: HashMap<String, String>,
+    pub input_buffer: String,
+    pub output_buffer: String,
 }
