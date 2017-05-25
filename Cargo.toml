@@ -7,3 +7,4 @@ authors = ["Ben Kimock"]
 hostname = "*"
 term = "*"
 term_size = "*"
+termios = "*"
