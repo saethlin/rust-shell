@@ -7,17 +7,16 @@ use std::path::PathBuf;
 use std::iter;
 use std::str;
 use std::io;
-use std::cmp::max;
 use std::io::{Write, Read};
 use self::termios::{Termios, TCSANOW, ECHO, ICANON, tcsetattr};
-//use circular_buffer;
+use circular_buffer::CircularBuffer;
 
 pub struct ShellState {
     pub directory: PathBuf,
     pub user: String,
     pub hostname: String,
     pub variables: HashMap<std::ffi::OsString, std::ffi::OsString>,
-    pub history: Vec<String>,
+    pub history: CircularBuffer<String>,
 }
 
 fn print_buffer(handle: &mut std::io::StdoutLock, buf: &str, clear: bool) {
@@ -92,15 +91,23 @@ impl ShellState {
                 }
                 // tab inserts the current autocomplete suggestion
                 9 => {
-                    input_buffer.clear();
-                    input_buffer.push_str(suggestion.as_str());
-                    print_buffer(&mut out_handle, input_buffer, true);
-                    cursor_position = input_buffer.len();
+                    if !suggestion.is_empty() {
+                        input_buffer.clear();
+                        input_buffer.push_str(suggestion.as_str());
+                        print_buffer(&mut out_handle, input_buffer, true);
+                        cursor_position = input_buffer.len();
+                    }
                 }
                 // return should append the command to history and return to the caller
                 13 => {
+                    // Clear any active suggestion
+                    if suggestion.len() > input_buffer.len() {
+                        print!("{}", " ".repeat(suggestion.len() - input_buffer.len()));
+                    }
                     println!("\r");
-                    self.history.push(input_buffer.to_owned());
+                    if self.history.tail().unwrap_or(&"".to_owned()) != input_buffer {
+                        self.history.push(input_buffer.to_owned());
+                    }
                     tcsetattr(stdin, TCSANOW, &old_term).unwrap();
                     return;
                 },
@@ -113,7 +120,7 @@ impl ShellState {
                         65 => {
                             if input_buffer.is_empty() {
                                 input_buffer.clear();
-                                input_buffer.push_str(self.history.last().unwrap_or(&"".to_owned()));
+                                input_buffer.push_str(self.history.head().unwrap_or(&"".to_owned()));
                                 print_buffer(&mut out_handle, input_buffer, true);
                                 cursor_position = input_buffer.len();
                             }
@@ -182,19 +189,21 @@ impl ShellState {
                 _ => {
                     input_buffer.push(charbuf[0] as char);
 
+                    print!("\r╰ ➤ {}", " ".repeat(suggestion.len()));
                     suggestion.clear();
                     // Find our new suggestion and print it in gray
-                    for entry in self.history.iter().rev() {
-                        if entry.starts_with(input_buffer.as_str()) {
+                    for entry in self.history.iter_rev() {
+                        if entry.starts_with(input_buffer.as_str()) && entry != input_buffer.as_str() {
                             suggestion.push_str(entry);
                             break;
                         }
                     }
-
-                    let mut t = term::stdout().unwrap();
-                    t.fg(term::color::MAGENTA).unwrap();
-                    write!(t, "\r╰ ➤ {}", suggestion).unwrap();
-                    t.fg(term::color::BRIGHT_WHITE).unwrap();
+                    if !suggestion.is_empty() {
+                        let mut t = term::stdout().unwrap();
+                        t.fg(term::color::MAGENTA).unwrap();
+                        write!(t, "\r╰ ➤ {}", suggestion).unwrap();
+                        t.fg(term::color::BRIGHT_WHITE).unwrap();
+                    }
 
                     print_buffer(&mut out_handle, input_buffer, false);
                     cursor_position += 1;

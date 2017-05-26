@@ -11,16 +11,16 @@ pub fn exec(state: &ShellState, args: &mut std::str::SplitWhitespace) {
             if arg.starts_with('$') {
                 let (_, key) = arg.split_at(1);
                 if let Some(val) = state.variables.get(&OsString::from(key)) {
-                    print!("{:?}", val);
+                    print!("{}", val.to_string_lossy());
                     if peeker.peek().is_some() {print!(" ");}
                     continue;
                 }
                 else {
-                    print!("{:?}", arg);
+                    print!("{}", arg);
                 }
             }
             else {
-                print!("{:?}", arg);
+                print!("{}", arg);
             }
         } else {
             break;

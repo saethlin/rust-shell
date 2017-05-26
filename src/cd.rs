@@ -2,10 +2,10 @@ extern crate std;
 
 use std::path::Path;
 use std::ffi::OsString;
-use std::env;
 use state::ShellState;
 
 pub fn exec(state: &mut ShellState, args: &mut std::str::SplitWhitespace) {
+    #![allow(unused)]
     match args.next() {
         Some(dir) => {
             let path = Path::new(dir);

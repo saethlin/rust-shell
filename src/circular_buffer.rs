@@ -1,6 +1,6 @@
 extern crate std;
 
-struct CircularBuffer<T> {
+pub struct CircularBuffer<T> {
     buffer: Vec<T>,
     head: usize,
     tail: usize,
@@ -15,6 +15,7 @@ impl <T: Default> CircularBuffer<T>
             tail: 0,
         }
     }
+
     pub fn push(&mut self, entry: T) {
         self.tail += 1;
         if self.tail > self.buffer.len() {
@@ -36,22 +37,25 @@ impl <T: Default> CircularBuffer<T>
         }
     }
 
-    pub fn tail(&self) -> Option<&T> {
-        if self.head == self.tail {
-            ()
+    pub fn iter_rev(&self) -> CircularBufferIterRev<T> {
+        CircularBufferIterRev {
+            buffer: self,
+            position: self.tail,
         }
+    }
+
+    pub fn tail(&self) -> Option<&T> {
+        if self.head == self.tail { () }
         Some(&self.buffer[self.tail])
     }
 
     pub fn head(&self) -> Option<&T> {
-        if self.head == self.tail {
-            ()
-        }
+        if self.head == self.tail { () }
         Some(&self.buffer[self.head])
     }
 }
 
-struct CircularBufferIter<'a, T: 'a> {
+pub struct CircularBufferIter<'a, T: 'a> {
     position: usize,
     buffer: &'a CircularBuffer<T>,
 }
@@ -59,6 +63,7 @@ struct CircularBufferIter<'a, T: 'a> {
 impl <'a, T: Default + 'a>Iterator for CircularBufferIter<'a, T> {
     type Item = &'a T;
     fn next(&mut self) -> Option<&'a T> {
+        let oldpos = self.position;
         if self.position == self.buffer.tail {
             None
         }
@@ -67,7 +72,31 @@ impl <'a, T: Default + 'a>Iterator for CircularBufferIter<'a, T> {
             if self.position > self.buffer.buffer.len() {
                 self.position = 0;
             }
-            Some(&self.buffer.buffer[self.position])
+            Some(&self.buffer.buffer[oldpos])
+        }
+    }
+}
+
+pub struct CircularBufferIterRev<'a, T: 'a> {
+    position: usize,
+    buffer: &'a CircularBuffer<T>,
+}
+
+impl <'a, T: Default + 'a>Iterator for CircularBufferIterRev<'a, T> {
+    type Item = &'a T;
+    fn next(&mut self) -> Option<&'a T> {
+        let oldpos = self.position;
+        if self.position == self.buffer.head {
+            None
+        }
+        else {
+            if self.position > 0 {
+                self.position -= 1;
+            }
+            else {
+                self.position = self.buffer.buffer.len()-1
+            }
+            Some(&self.buffer.buffer[oldpos])
         }
     }
 }
