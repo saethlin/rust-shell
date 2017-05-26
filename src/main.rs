@@ -5,15 +5,18 @@ extern crate term;
 use std::io;
 use std::io::Write;
 use std::str;
+use std::env;
+use std::ffi::OsString;
 use hostname::get_hostname;
 use std::path::{PathBuf, Path};
 use std::collections::HashMap;
 use shell::state::ShellState;
 
 fn main() {
-    // TODO: Tab completion
-    // TODO: Syntax highlighting
+    // TODO: Interact with system environment variables
+    // TODO: Abstract out the prompt and read from a config file
     // TODO: Force-alias ls to color=auto
+    // TODO: Syntax highlighting
     // TODO: Read some config file to get things like the home directory
     // TODO: Semicolons between commands on a single line
     // TODO: Pipes and output redirection
@@ -24,12 +27,12 @@ fn main() {
         variables: HashMap::new(),
         history: Vec::new(),
     };
-    state.variables.insert("HOME".to_owned(), "/home/ben".to_owned());
-    state.variables.insert("PATH".to_owned(), "/usr/bin:/bin:".to_owned());
-    state.variables.insert("SHELL".to_owned(), "rsh".to_owned());
-    state.variables.insert("PROMPT".to_owned(), "".to_owned());
 
-    state.directory = Path::new(&state.variables["HOME"]).to_path_buf();
+    for (key, value) in env::vars_os() {
+        state.variables.insert(key, value);
+    }
+    state.variables.insert(OsString::from("SHELL"), OsString::from("rsh"));
+    state.directory = Path::new(&state.variables[&std::ffi::OsString::from("HOME")]).to_path_buf();
 
     let mut input_buffer = String::new();
 
@@ -43,7 +46,7 @@ fn main() {
             "" => print!(""),
             "cd" => shell::cd::exec(&mut state, &mut args),
             "echo" => shell::echo::exec(&state, &mut args),
-            "exit" => {io::stdout().flush(); std::process::exit(0)},
+            "exit" => {io::stdout().flush().unwrap(); std::process::exit(0)},
             "ls" => {run_command(&state, &cmd, args)},
             _ => run_command(&state, &cmd, args)
         };
@@ -54,7 +57,9 @@ fn run_command(state: &ShellState, command: &str, args: std::str::SplitWhitespac
     use std::process::Command;
     use std::fs;
 
-    for entries in state.variables["PATH"].split(':')
+    let path = state.variables[&std::ffi::OsString::from("PATH")].clone();
+
+    for entries in path.into_string().unwrap().split(':')
         .map(|dir| fs::read_dir(Path::new(dir)))
         .filter_map(|e| e.ok()) { // loop over the iterator of every directory in PATH that's possible to read
         for dir_entry in entries

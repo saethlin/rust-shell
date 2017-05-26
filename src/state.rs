@@ -7,19 +7,20 @@ use std::path::PathBuf;
 use std::iter;
 use std::str;
 use std::io;
+use std::cmp::max;
 use std::io::{Write, Read};
 use self::termios::{Termios, TCSANOW, ECHO, ICANON, tcsetattr};
-use circular_buffer;
+//use circular_buffer;
 
 pub struct ShellState {
     pub directory: PathBuf,
     pub user: String,
     pub hostname: String,
-    pub variables: HashMap<String, String>,
+    pub variables: HashMap<std::ffi::OsString, std::ffi::OsString>,
     pub history: Vec<String>,
 }
 
-fn print_buffer(handle: &mut std::io::StdoutLock, buf: &String, clear: bool) {
+fn print_buffer(handle: &mut std::io::StdoutLock, buf: &str, clear: bool) {
     if clear {
         print!("\r    ");
         print!("{}", " ".repeat(buf.len()+1));
@@ -57,7 +58,7 @@ impl ShellState {
         input_buffer.clear();
         let stdout = io::stdout(); // Consider locking this and writing directly
         let stdin = 0;
-        let mut old_term = Termios::from_fd(stdin).unwrap();
+        let old_term = Termios::from_fd(stdin).unwrap();
         let mut term = Termios::from_fd(stdin).unwrap();
         termios::cfmakeraw(&mut term);
         term.c_lflag &= !(ICANON | ECHO); // what are canonical and echo mode
@@ -65,6 +66,8 @@ impl ShellState {
         let mut reader = io::stdin();
         let mut charbuf = [0; 1];
         let mut out_handle = stdout.lock();
+
+        let mut suggestion = String::new();
 
         let mut cursor_position = 0;
 
@@ -87,22 +90,16 @@ impl ShellState {
                         std::process::exit(0);
                     }
                 }
-                // tab textual autocompletion from history
+                // tab inserts the current autocomplete suggestion
                 9 => {
-                    for entry in self.history.iter().rev() {
-                        if entry.starts_with(input_buffer.as_str()) {
-                            input_buffer.clear();
-                            input_buffer.push_str(entry);
-                            print_buffer(&mut out_handle, &input_buffer, true);
-                            cursor_position = input_buffer.len();
-                            break;
-                        }
-                    }
-
+                    input_buffer.clear();
+                    input_buffer.push_str(suggestion.as_str());
+                    print_buffer(&mut out_handle, input_buffer, true);
+                    cursor_position = input_buffer.len();
                 }
                 // return should append the command to history and return to the caller
                 13 => {
-                    print!("\n\r");
+                    println!("\r");
                     self.history.push(input_buffer.to_owned());
                     tcsetattr(stdin, TCSANOW, &old_term).unwrap();
                     return;
@@ -117,7 +114,7 @@ impl ShellState {
                             if input_buffer.is_empty() {
                                 input_buffer.clear();
                                 input_buffer.push_str(self.history.last().unwrap_or(&"".to_owned()));
-                                print_buffer(&mut out_handle, &input_buffer, true);
+                                print_buffer(&mut out_handle, input_buffer, true);
                                 cursor_position = input_buffer.len();
                             }
                         },
@@ -133,7 +130,7 @@ impl ShellState {
                             }
                         }
                         68 => { // Left
-                            if (cursor_position > 0) {
+                            if cursor_position > 0 {
                                 cursor_position -= 1;
                                 print!("\r╰ ➤ ");
                                 for c in input_buffer.chars().take(cursor_position) {
@@ -148,6 +145,12 @@ impl ShellState {
                 // del, which is the same char as a tilde. // TODO: figure out how to detect modifier keys
                 126 => {
                     if !input_buffer.is_empty() && cursor_position < input_buffer.len() {
+
+                        // Purge any currently printed suggestion
+                        if !suggestion.is_empty() {
+                            print!("\r╰ ➤ {}", " ".repeat(suggestion.len()));
+                        }
+
                         input_buffer.remove(cursor_position);
                         print!("\r╰ ➤ {} \r╰ ➤ ", input_buffer);
                         for c in input_buffer.chars().take(cursor_position) {
@@ -159,6 +162,12 @@ impl ShellState {
                 // backspace removes one character from the buffer
                 127 => {
                     if cursor_position > 0 { // And input_buffer is not empty, but that should be enforced by the other rules on the cursor
+
+                        // Purge any currently printed suggestion
+                        if !suggestion.is_empty() {
+                            print!("\r╰ ➤ {}", " ".repeat(suggestion.len()));
+                        }
+
                         input_buffer.remove(cursor_position-1);
                         cursor_position -= 1;
                         print!("\r╰ ➤ {} \r╰ ➤ ", input_buffer);
@@ -169,11 +178,25 @@ impl ShellState {
                     }
                 }
 
-
                 // Everything else is a printable symbol and gets added to the input buffer
                 _ => {
                     input_buffer.push(charbuf[0] as char);
-                    print_buffer(&mut out_handle, &input_buffer, false);
+
+                    suggestion.clear();
+                    // Find our new suggestion and print it in gray
+                    for entry in self.history.iter().rev() {
+                        if entry.starts_with(input_buffer.as_str()) {
+                            suggestion.push_str(entry);
+                            break;
+                        }
+                    }
+
+                    let mut t = term::stdout().unwrap();
+                    t.fg(term::color::MAGENTA).unwrap();
+                    write!(t, "\r╰ ➤ {}", suggestion).unwrap();
+                    t.fg(term::color::BRIGHT_WHITE).unwrap();
+
+                    print_buffer(&mut out_handle, input_buffer, false);
                     cursor_position += 1;
                 },
             }
