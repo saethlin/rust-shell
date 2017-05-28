@@ -17,11 +17,11 @@ impl <T: Default> CircularBuffer<T>
     }
 
     pub fn push(&mut self, entry: T) {
+        self.buffer[self.tail] = entry;
         self.tail += 1;
         if self.tail > self.buffer.len() {
             self.tail = 0;
         }
-        self.buffer[self.tail] = entry;
         if self.head == self.tail {
             self.head += 1;
             if self.head > self.buffer.len() {
@@ -41,16 +41,17 @@ impl <T: Default> CircularBuffer<T>
         CircularBufferIterRev {
             buffer: self,
             position: self.tail,
+            exhausted: false,
         }
     }
 
     pub fn tail(&self) -> Option<&T> {
-        if self.head == self.tail { () }
-        Some(&self.buffer[self.tail])
+        if self.head == self.tail {return None}
+        Some(&self.buffer[self.tail-1])
     }
 
     pub fn head(&self) -> Option<&T> {
-        if self.head == self.tail { () }
+        if self.head == self.tail {return None}
         Some(&self.buffer[self.head])
     }
 }
@@ -80,23 +81,25 @@ impl <'a, T: Default + 'a>Iterator for CircularBufferIter<'a, T> {
 pub struct CircularBufferIterRev<'a, T: 'a> {
     position: usize,
     buffer: &'a CircularBuffer<T>,
+    exhausted: bool,
 }
 
 impl <'a, T: Default + 'a>Iterator for CircularBufferIterRev<'a, T> {
     type Item = &'a T;
     fn next(&mut self) -> Option<&'a T> {
-        let oldpos = self.position;
+        if self.exhausted {return None}
         if self.position == self.buffer.head {
-            None
+            self.exhausted = true;
+        }
+
+        // Decrement the location
+        let oldpos = self.position;
+        if self.position > 0 {
+            self.position -= 1;
         }
         else {
-            if self.position > 0 {
-                self.position -= 1;
-            }
-            else {
-                self.position = self.buffer.buffer.len()-1
-            }
-            Some(&self.buffer.buffer[oldpos])
+            self.position = self.buffer.buffer.len()-1
         }
+        Some(&self.buffer.buffer[oldpos])
     }
 }

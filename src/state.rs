@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::iter;
 use std::str;
+use std::fs;
 use std::io;
 use std::io::{Write, Read};
 use self::termios::{Termios, TCSANOW, ECHO, ICANON, tcsetattr};
@@ -27,8 +28,6 @@ fn print_buffer(handle: &mut std::io::StdoutLock, buf: &str, clear: bool) {
     print!("\r╰ ➤ {}", buf);
     handle.flush().unwrap();
 }
-
-
 
 impl ShellState {
     pub fn prompt(&self) {
@@ -52,7 +51,8 @@ impl ShellState {
         io::stdout().flush().unwrap(); // Flush to ensure stdout is printed immediately
     }
 
-    pub fn read(&mut self, input_buffer: &mut String) {
+    pub fn prompt_read(&mut self, input_buffer: &mut String) {
+        self.prompt();
 
         input_buffer.clear();
         let stdout = io::stdout(); // Consider locking this and writing directly
@@ -98,7 +98,7 @@ impl ShellState {
                         cursor_position = input_buffer.len();
                     }
                 }
-                // return should append the command to history and return to the caller
+                // return/enter should append the command to history and return to the caller
                 13 => {
                     // Clear any active suggestion
                     if suggestion.len() > input_buffer.len() {
@@ -125,9 +125,10 @@ impl ShellState {
                                 cursor_position = input_buffer.len();
                             }
                         },
-                        66 => { // Down
-                        },
-                        67 => { // Right
+                        // Down
+                        //66 => { },
+                        // Right
+                        67 => {
                             if cursor_position < input_buffer.len() {
                                 cursor_position += 1;
                                 print!("\r╰ ➤ ");
@@ -136,7 +137,8 @@ impl ShellState {
                                 }
                             }
                         }
-                        68 => { // Left
+                        // Left
+                        68 => {
                             if cursor_position > 0 {
                                 cursor_position -= 1;
                                 print!("\r╰ ➤ ");
@@ -191,25 +193,59 @@ impl ShellState {
 
                     print!("\r╰ ➤ {}", " ".repeat(suggestion.len()));
                     suggestion.clear();
-                    // Find our new suggestion and print it in gray
-                    for entry in self.history.iter_rev() {
-                        if entry.starts_with(input_buffer.as_str()) && entry != input_buffer.as_str() {
-                            suggestion.push_str(entry);
-                            break;
+
+                    // Try to find a suggestion from the contents of the current working directory
+
+                    // Split off the last word in the input buffer
+                    // This unwrap is safe because rsplitn always yields at least one element
+                    let last_word = input_buffer.as_str().rsplitn(2, ' ').next().unwrap();
+                    if !last_word.is_empty() && !last_word.starts_with('-') {
+                        match self.find_match_directory(last_word) {
+                            Some(dirmatch) => {
+                                suggestion.push_str(dirmatch.as_str());
+                                let mut t = term::stdout().unwrap();
+                                t.fg(term::color::MAGENTA).unwrap();
+                                let print_this : String = suggestion.chars().skip(last_word.len()).collect();
+                                write!(t, "\r╰ ➤ {}{}", " ".repeat(input_buffer.len()), print_this).unwrap();
+                                t.fg(term::color::BRIGHT_WHITE).unwrap();
+                            },
+                            None => {
+                                if let Some(histmatch) = self.find_match_history(input_buffer) {
+                                    suggestion.push_str(&histmatch);
+                                    let mut t = term::stdout().unwrap();
+                                    t.fg(term::color::MAGENTA).unwrap();
+                                    write!(t, "\r╰ ➤ {}", suggestion).unwrap();
+                                    t.fg(term::color::BRIGHT_WHITE).unwrap();
+                                }
+                            }
                         }
                     }
-                    if !suggestion.is_empty() {
-                        let mut t = term::stdout().unwrap();
-                        t.fg(term::color::MAGENTA).unwrap();
-                        write!(t, "\r╰ ➤ {}", suggestion).unwrap();
-                        t.fg(term::color::BRIGHT_WHITE).unwrap();
-                    }
-
                     print_buffer(&mut out_handle, input_buffer, false);
                     cursor_position += 1;
                 },
             }
         }
     }
-}
 
+    fn find_match_directory(&self, pattern: &str) -> Option<String> {
+        if let Ok(entries) = fs::read_dir(&self.directory) {
+            for entry in entries.filter_map(|e| e.ok()) {
+                if let Ok(str_name) = entry.file_name().into_string() {
+                    if str_name.as_str().starts_with(pattern) {
+                        return Some(str_name);
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn find_match_history(&self, pattern: &str) -> Option<String> {
+        for entry in self.history.iter_rev() {
+            if entry.starts_with(pattern) && entry != pattern {
+                return Some(entry.to_owned());
+            }
+        }
+        None
+    }
+}

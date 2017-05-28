@@ -6,6 +6,9 @@ authors = ["Ben Kimock"]
 [dependencies]
 hostname = "*"
 term = "*"
-term_size = "*"
 termios = "*"
 glob = "*"
+
+[profile.release]
+lto = true
+panic = "unwind"
