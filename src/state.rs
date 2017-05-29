@@ -1,5 +1,5 @@
 extern crate std;
-extern crate term;
+extern crate termcolor;
 extern crate termios;
 
 use std::collections::HashMap;
@@ -10,6 +10,9 @@ use std::fs;
 use std::io;
 use std::io::{Write, Read};
 use self::termios::{Termios, TCSANOW, tcsetattr};
+use std::ffi::OsStr;
+use self::termcolor::{Color, ColorChoice, ColorSpec, WriteColor};
+
 use circular_buffer::CircularBuffer;
 
 pub struct ShellState {
@@ -28,18 +31,15 @@ fn print_buffer(buf: &str, clear: bool) {
     print!("\r╰ ➤ {}", buf);
 }
 
-// "\r{BOLD}{BRIGHT_WHITE}╭{BRIGHT_RED} ➜ {BRIGHT_GREEN}{$USER}@{$HOSTNAME}:{BRIGHT_CYAN}{$PWD}{BRIGHT_WHITE}\n\r╰ ➤ "
-
-
 impl ShellState {
 
-    pub fn print_prompt(&self) {
+    pub fn prompt(&self) {
         #![allow(unused)]
-        use std::ffi::{OsStr, OsString};
-        let mut t = term::stdout().unwrap();
+        let  mut stdout = termcolor::StandardStream::stdout(ColorChoice::Auto);
+        let mut spec = termcolor::ColorSpec::new();
         let mut buf = String::new();
-        let prompt = OsString::from("{BOLD}{BRIGHT_WHITE}╭{BRIGHT_RED} ➜ {BRIGHT_GREEN}{$USER}@{$HOST}:{BRIGHT_CYAN}{$PWD}{BRIGHT_WHITE}\n╰ ➤ ");
-        let mut in_braces = true;
+        let prompt = &self.variables[OsStr::new("PROMPT")];
+        let mut in_braces = false;
         print!("\r");
         for c in prompt.to_string_lossy().chars() {
             match c {
@@ -50,16 +50,31 @@ impl ShellState {
                     if buf.starts_with('$') {
                         let (_, key) = buf.split_at(1);
                         if let Some(val) = self.variables.get(OsStr::new(key)) {
-                            print!("{}", val.to_string_lossy());
+                            write!(&mut stdout, "{}", val.to_string_lossy());
                         }
                     }
                     else {
                         match buf.as_ref() {
-                            "BOLD" => {t.attr(term::Attr::Bold);}
-                            "BRIGHT_WHITE" => {t.fg(term::color::BRIGHT_WHITE);}
-                            "BRIGHT_RED" => {t.fg(term::color::BRIGHT_RED);}
-                            "BRIGHT_GREEN" => {t.fg(term::color::BRIGHT_GREEN);}
-                            "BRIGHT_CYAN" => {t.fg(term::color::BRIGHT_CYAN);}
+                            "BOLD" => {
+                                spec.set_bold(true);
+                                stdout.set_color(&spec);
+                            }
+                            "WHITE" => {
+                                spec.set_fg(Some(Color::White));
+                                stdout.set_color(&spec);
+                            }
+                            "RED" => {
+                                spec.set_fg(Some(Color::Red));
+                                stdout.set_color(&spec);
+                            }
+                            "GREEN" => {
+                                spec.set_fg(Some(Color::Green));
+                                stdout.set_color(&spec);
+                            }
+                            "CYAN" => {
+                                spec.set_fg(Some(Color::Cyan));
+                                stdout.set_color(&spec);
+                            }
                             _ => {},
                         };
                     }
@@ -68,44 +83,20 @@ impl ShellState {
 
                 }
                 '\n' => {
-                    print!("\n\r");
+                    {write!(&mut stdout, "\n\r");}
                 }
                 _ => {
                     if in_braces {
                         buf.push(c);
                     }
                     else {
-                        print!("{}", c)
+                        write!(&mut stdout, "{}", c);
                     }
                 }
             }
         }
-        t.reset().unwrap();
+        stdout.reset();
         io::stdout().flush().unwrap();
-    }
-
-    pub fn prompt(&self) {
-        #![allow(unused)]
-
-        self.print_prompt();
-        return;
-
-        let mut t = term::stdout().unwrap();
-
-        t.attr(term::Attr::Bold);
-        t.fg(term::color::BRIGHT_WHITE);
-        write!(t, "\r╭").unwrap();
-        t.fg(term::color::BRIGHT_RED);
-        write!(t, " ➜ ").unwrap();
-        t.fg(term::color::BRIGHT_GREEN);
-        write!(t, "{}@{}:", self.user, self.hostname).unwrap();
-        t.fg(term::color::BRIGHT_CYAN);
-        write!(t, "{}", self.directory.to_string_lossy()).unwrap();
-        t.fg(term::color::BRIGHT_WHITE);
-        write!(t, "\n\r╰ ➤ ").unwrap();
-        t.reset().unwrap();
-
-        io::stdout().flush().unwrap(); // Flush to ensure stdout is printed immediately
     }
 
     pub fn prompt_read(&mut self, input_buffer: &mut String) {
@@ -252,19 +243,19 @@ impl ShellState {
                         match self.find_match_directory(last_word) {
                             Some(dirmatch) => {
                                 suggestion.push_str(dirmatch.as_str());
-                                let mut t = term::stdout().unwrap();
-                                t.fg(term::color::MAGENTA).unwrap();
+                                let mut stdout = termcolor::StandardStream::stdout(termcolor::ColorChoice::Auto);
+                                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Magenta))).unwrap();
                                 let print_this : String = suggestion.chars().skip(last_word.len()).collect();
-                                write!(t, "\r╰ ➤ {}{}", " ".repeat(input_buffer.len()), print_this).unwrap();
-                                t.fg(term::color::BRIGHT_WHITE).unwrap();
+                                write!(&mut stdout, "\r╰ ➤ {}{}", " ".repeat(input_buffer.len()), print_this).unwrap();
+                                stdout.reset().unwrap();
                             },
                             None => {
                                 if let Some(histmatch) = self.find_match_history(input_buffer) {
                                     suggestion.push_str(&histmatch);
-                                    let mut t = term::stdout().unwrap();
-                                    t.fg(term::color::MAGENTA).unwrap();
-                                    write!(t, "\r╰ ➤ {}", suggestion).unwrap();
-                                    t.fg(term::color::BRIGHT_WHITE).unwrap();
+                                    let mut stdout = termcolor::StandardStream::stdout(termcolor::ColorChoice::Auto);
+                                    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Magenta))).unwrap();
+                                    write!(&mut stdout, "\r╰ ➤ {}", suggestion).unwrap();
+                                    stdout.reset().unwrap();
                                 }
                             }
                         }

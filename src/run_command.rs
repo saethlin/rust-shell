@@ -1,6 +1,5 @@
 extern crate std;
 extern crate hostname;
-extern crate term;
 extern crate glob;
 
 use std::str;

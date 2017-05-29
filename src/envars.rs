@@ -3,6 +3,7 @@ extern crate std;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 
+#[derive(Default)]
 pub struct EnVars {
     map: HashMap<std::ffi::OsString, std::ffi::OsString>
 }
@@ -15,6 +16,6 @@ impl EnVars {
     }
 
     pub fn get(&self, name: &str) -> Option<&std::ffi::OsString> {
-        return self.map.get(OsStr::new(name));
+        self.map.get(OsStr::new(name))
     }
 }

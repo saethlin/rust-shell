@@ -1,5 +1,4 @@
 extern crate hostname;
-extern crate term;
 extern crate glob;
 extern crate rust_shell as shell;
 
@@ -15,7 +14,6 @@ use shell::state::ShellState;
 use shell::circular_buffer::CircularBuffer;
 
 fn main() {
-    // TODO: Persistent history
     // TODO: Factor out more helper functions
     // TODO: Change state.variables to a wrapper around a hashmap that updates sys env vars, and can take String and str
     // TODO: Read some config file to get things like the home directory
@@ -40,7 +38,9 @@ fn main() {
     let hist_loc = Path::new(&home).join(Path::new(OsStr::new(".rsh_history")));
     shell.variables.insert(OsString::from("HISTFILE"), hist_loc.as_os_str().to_owned());
     shell.variables.insert(OsString::from("HISTSIZE"), OsString::from("10000"));
-    shell.variables.insert(OsString::from("HOST"), OsString::from("firstborn"));
+    shell.variables.insert(OsString::from("HOSTNAME"), OsString::from(get_hostname().unwrap()));
+
+    shell.variables.insert(OsString::from("PROMPT"), OsString::from("{BOLD}{WHITE}╭{RED} ➜ {GREEN}{$USER}@{$HOSTNAME}:{CYAN}{$PWD}{WHITE}\n╰ ➤ "));
 
     shell.directory = Path::new(&shell.variables[&std::ffi::OsString::from("HOME")]).to_path_buf();
 
