@@ -9,7 +9,7 @@ use std::str;
 use std::fs;
 use std::io;
 use std::io::{Write, Read};
-use self::termios::{Termios, TCSANOW, ECHO, ICANON, tcsetattr};
+use self::termios::{Termios, TCSANOW, tcsetattr};
 use circular_buffer::CircularBuffer;
 
 pub struct ShellState {
@@ -20,31 +20,88 @@ pub struct ShellState {
     pub history: CircularBuffer<String>,
 }
 
-fn print_buffer(handle: &mut std::io::StdoutLock, buf: &str, clear: bool) {
+fn print_buffer(buf: &str, clear: bool) {
     if clear {
         print!("\r    ");
         print!("{}", " ".repeat(buf.len()+1));
     }
     print!("\r╰ ➤ {}", buf);
-    handle.flush().unwrap();
 }
 
+// "\r{BOLD}{BRIGHT_WHITE}╭{BRIGHT_RED} ➜ {BRIGHT_GREEN}{$USER}@{$HOSTNAME}:{BRIGHT_CYAN}{$PWD}{BRIGHT_WHITE}\n\r╰ ➤ "
+
+
 impl ShellState {
+
+    pub fn print_prompt(&self) {
+        #![allow(unused)]
+        use std::ffi::{OsStr, OsString};
+        let mut t = term::stdout().unwrap();
+        let mut buf = String::new();
+        let prompt = OsString::from("{BOLD}{BRIGHT_WHITE}╭{BRIGHT_RED} ➜ {BRIGHT_GREEN}{$USER}@{$HOST}:{BRIGHT_CYAN}{$PWD}{BRIGHT_WHITE}\n╰ ➤ ");
+        let mut in_braces = true;
+        print!("\r");
+        for c in prompt.to_string_lossy().chars() {
+            match c {
+                '{' => {
+                    in_braces = true;
+                }
+                '}' => {
+                    if buf.starts_with('$') {
+                        let (_, key) = buf.split_at(1);
+                        if let Some(val) = self.variables.get(OsStr::new(key)) {
+                            print!("{}", val.to_string_lossy());
+                        }
+                    }
+                    else {
+                        match buf.as_ref() {
+                            "BOLD" => {t.attr(term::Attr::Bold);}
+                            "BRIGHT_WHITE" => {t.fg(term::color::BRIGHT_WHITE);}
+                            "BRIGHT_RED" => {t.fg(term::color::BRIGHT_RED);}
+                            "BRIGHT_GREEN" => {t.fg(term::color::BRIGHT_GREEN);}
+                            "BRIGHT_CYAN" => {t.fg(term::color::BRIGHT_CYAN);}
+                            _ => {},
+                        };
+                    }
+                    in_braces = false;
+                    buf.clear();
+
+                }
+                '\n' => {
+                    print!("\n\r");
+                }
+                _ => {
+                    if in_braces {
+                        buf.push(c);
+                    }
+                    else {
+                        print!("{}", c)
+                    }
+                }
+            }
+        }
+        t.reset().unwrap();
+        io::stdout().flush().unwrap();
+    }
+
     pub fn prompt(&self) {
         #![allow(unused)]
+
+        self.print_prompt();
+        return;
+
         let mut t = term::stdout().unwrap();
 
+        t.attr(term::Attr::Bold);
         t.fg(term::color::BRIGHT_WHITE);
         write!(t, "\r╭").unwrap();
         t.fg(term::color::BRIGHT_RED);
-        t.attr(term::Attr::Bold);
         write!(t, " ➜ ").unwrap();
         t.fg(term::color::BRIGHT_GREEN);
         write!(t, "{}@{}:", self.user, self.hostname).unwrap();
         t.fg(term::color::BRIGHT_CYAN);
         write!(t, "{}", self.directory.to_string_lossy()).unwrap();
         t.fg(term::color::BRIGHT_WHITE);
-        t.attr(term::Attr::Bold);
         write!(t, "\n\r╰ ➤ ").unwrap();
         t.reset().unwrap();
 
@@ -52,26 +109,20 @@ impl ShellState {
     }
 
     pub fn prompt_read(&mut self, input_buffer: &mut String) {
-        self.prompt();
-
-        input_buffer.clear();
-        let stdout = io::stdout(); // Consider locking this and writing directly
         let stdin = 0;
         let old_term = Termios::from_fd(stdin).unwrap();
         let mut term = Termios::from_fd(stdin).unwrap();
         termios::cfmakeraw(&mut term);
-        term.c_lflag &= !(ICANON | ECHO); // what are canonical and echo mode
         tcsetattr(stdin, TCSANOW, &term).unwrap();
-        let mut reader = io::stdin();
+
+        self.prompt();
+        input_buffer.clear();
         let mut charbuf = [0; 1];
-        let mut out_handle = stdout.lock();
-
         let mut suggestion = String::new();
-
         let mut cursor_position = 0;
 
         loop {
-            reader.read_exact(&mut charbuf).unwrap();
+            io::stdin().read_exact(&mut charbuf).unwrap();
 
             match charbuf[0] {
                 // clear line on a ctrl+c
@@ -86,6 +137,7 @@ impl ShellState {
                         println!('\r');
                         io::stdout().flush().unwrap();
                         tcsetattr(stdin, TCSANOW, &old_term).unwrap();
+                        self.save_history();
                         std::process::exit(0);
                     }
                 }
@@ -94,7 +146,7 @@ impl ShellState {
                     if !suggestion.is_empty() {
                         input_buffer.clear();
                         input_buffer.push_str(suggestion.as_str());
-                        print_buffer(&mut out_handle, input_buffer, true);
+                        print_buffer(input_buffer, true);
                         cursor_position = input_buffer.len();
                     }
                 }
@@ -113,15 +165,15 @@ impl ShellState {
                 },
                 // Escape character indicates an arrow key
                 27 => {
-                    reader.read_exact(&mut charbuf).unwrap();
-                    reader.read_exact(&mut charbuf).unwrap();
+                    io::stdin().read_exact(&mut charbuf).unwrap();
+                    io::stdin().read_exact(&mut charbuf).unwrap();
                     match charbuf[0] {
                         // Up access last entry
                         65 => {
                             if input_buffer.is_empty() {
                                 input_buffer.clear();
                                 input_buffer.push_str(self.history.head().unwrap_or(&"".to_owned()));
-                                print_buffer(&mut out_handle, input_buffer, true);
+                                print_buffer(input_buffer, true);
                                 cursor_position = input_buffer.len();
                             }
                         },
@@ -149,7 +201,6 @@ impl ShellState {
                         }
                         _ => {},
                     }
-                    out_handle.flush().unwrap();
                 }
                 // del, which is the same char as a tilde. // TODO: figure out how to detect modifier keys
                 126 => {
@@ -165,7 +216,6 @@ impl ShellState {
                         for c in input_buffer.chars().take(cursor_position) {
                             print!("{}", c);
                         }
-                        out_handle.flush().unwrap();
                     }
                 }
                 // backspace removes one character from the buffer
@@ -183,7 +233,6 @@ impl ShellState {
                         for c in input_buffer.chars().take(cursor_position) {
                             print!("{}", c);
                         }
-                        out_handle.flush().unwrap();
                     }
                 }
 
@@ -220,10 +269,11 @@ impl ShellState {
                             }
                         }
                     }
-                    print_buffer(&mut out_handle, input_buffer, false);
+                    print_buffer(input_buffer, false);
                     cursor_position += 1;
                 },
             }
+            io::stdout().flush().unwrap(); // Always flush after getting input
         }
     }
 

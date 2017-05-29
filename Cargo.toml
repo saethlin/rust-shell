@@ -8,6 +8,7 @@ hostname = "*"
 term = "*"
 termios = "*"
 glob = "*"
+itertools = "*"
 
 [profile.release]
 lto = true

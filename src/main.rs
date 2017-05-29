@@ -40,6 +40,7 @@ fn main() {
     let hist_loc = Path::new(&home).join(Path::new(OsStr::new(".rsh_history")));
     shell.variables.insert(OsString::from("HISTFILE"), hist_loc.as_os_str().to_owned());
     shell.variables.insert(OsString::from("HISTSIZE"), OsString::from("10000"));
+    shell.variables.insert(OsString::from("HOST"), OsString::from("firstborn"));
 
     shell.directory = Path::new(&shell.variables[&std::ffi::OsString::from("HOME")]).to_path_buf();
 

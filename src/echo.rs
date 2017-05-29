@@ -1,32 +1,27 @@
 extern crate std;
+extern crate itertools;
 
-use std::ffi::OsString;
+use std::iter;
+use self::itertools::Itertools;
+use std::ffi::OsStr;
 use state::ShellState;
 
 impl ShellState {
     pub fn echo(&self, args: std::str::SplitWhitespace) {
-        let mut peeker = args.peekable();
-        loop {
-            if let Some(arg) = peeker.next() {
-                if arg.starts_with('$') {
-                    let (_, key) = arg.split_at(1);
-                    if let Some(val) = self.variables.get(&OsString::from(key)) {
-                        print!("{}", val.to_string_lossy());
-                        if peeker.peek().is_some() { print!(" "); }
-                        continue;
-                    } else {
-                        print!("{}", arg);
-                    }
-                } else {
-                    print!("{}", arg);
-                }
-            } else {
-                break;
-            }
-            if peeker.peek().is_some() {
-                print!(" ");
+        let vars = args.map(|a| self.lookup_envar(a).unwrap_or(a.to_owned()));
+        for entry in iter::repeat(" ".to_owned()).interleave_shortest(vars).skip(1) {
+            print!("{}", entry)
+        };
+        println!();
+    }
+
+    fn lookup_envar(&self, arg: &str) -> Option<String> {
+        if arg.starts_with('$') {
+            let (_, key) = arg.split_at(1);
+            if let Some(val) = self.variables.get(OsStr::new(key)) {
+                return Some(val.to_string_lossy().into_owned());
             }
         }
-       println!();
+        None
     }
 }
