@@ -12,4 +12,4 @@ itertools = "*"
 
 [profile.release]
 lto = true
-panic = "unwind"
+panic = "abort"

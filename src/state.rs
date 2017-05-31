@@ -2,25 +2,32 @@ extern crate std;
 extern crate termcolor;
 extern crate termios;
 
-use std::collections::HashMap;
-use std::path::PathBuf;
 use std::iter;
 use std::str;
 use std::fs;
 use std::io;
 use std::io::{Write, Read};
 use self::termios::{Termios, TCSANOW, tcsetattr};
-use std::ffi::OsStr;
 use self::termcolor::{Color, ColorChoice, ColorSpec, WriteColor};
-
 use circular_buffer::CircularBuffer;
+use envars::Envars;
 
 pub struct ShellState {
-    pub directory: PathBuf,
-    pub user: String,
-    pub hostname: String,
-    pub variables: HashMap<std::ffi::OsString, std::ffi::OsString>,
+    pub variables: Envars,
     pub history: CircularBuffer<String>,
+}
+
+pub struct PromptState {
+    pub input_buffer: String,
+    pub suggestion: String,
+    pub cursor_position: usize,
+    pub total_len: usize,
+}
+
+impl PromptState {
+    pub fn clear() {
+
+    }
 }
 
 fn print_buffer(buf: &str, clear: bool) {
@@ -38,7 +45,7 @@ impl ShellState {
         let  mut stdout = termcolor::StandardStream::stdout(ColorChoice::Auto);
         let mut spec = termcolor::ColorSpec::new();
         let mut buf = String::new();
-        let prompt = &self.variables[OsStr::new("PROMPT")];
+        let prompt = self.variables.get("PROMPT").unwrap();
         let mut in_braces = false;
         print!("\r");
         for c in prompt.to_string_lossy().chars() {
@@ -49,7 +56,7 @@ impl ShellState {
                 '}' => {
                     if buf.starts_with('$') {
                         let (_, key) = buf.split_at(1);
-                        if let Some(val) = self.variables.get(OsStr::new(key)) {
+                        if let Some(val) = self.variables.get(key) {
                             write!(&mut stdout, "{}", val.to_string_lossy());
                         }
                     }
@@ -111,6 +118,7 @@ impl ShellState {
         let mut charbuf = [0; 1];
         let mut suggestion = String::new();
         let mut cursor_position = 0;
+        let mut total_len = 0;
 
         loop {
             io::stdin().read_exact(&mut charbuf).unwrap();
@@ -118,8 +126,12 @@ impl ShellState {
             match charbuf[0] {
                 // clear line on a ctrl+c
                 3 => {
+                    if !suggestion.is_empty() {
+                        print!("\r╰ ➤ {}", " ".repeat(total_len));
+                        print!("\r╰ ➤ {}", input_buffer);
+                    }
                     input_buffer.clear();
-                    println!();
+                    println!("\r");
                     self.prompt();
                 },
                 // ctrl+d should close the shell, only if the input buffer is empty
@@ -135,17 +147,23 @@ impl ShellState {
                 // tab inserts the current autocomplete suggestion
                 9 => {
                     if !suggestion.is_empty() {
-                        input_buffer.clear();
+                        if let Some(ind) = input_buffer.as_str().rfind(' ') {
+                            input_buffer.truncate(ind);
+                            input_buffer.push(' ');
+                        }
                         input_buffer.push_str(suggestion.as_str());
                         print_buffer(input_buffer, true);
                         cursor_position = input_buffer.len();
+                        total_len = input_buffer.len();
                     }
                 }
                 // return/enter should append the command to history and return to the caller
                 13 => {
                     // Clear any active suggestion
-                    if suggestion.len() > input_buffer.len() {
-                        print!("{}", " ".repeat(suggestion.len() - input_buffer.len()));
+                    // TODO: Only need to print from cursor position onwards to clear
+                    if !suggestion.is_empty() {
+                        print!("\r╰ ➤ {}", " ".repeat(total_len));
+                        print!("\r╰ ➤ {}", input_buffer);
                     }
                     println!("\r");
                     if self.history.tail().unwrap_or(&"".to_owned()) != input_buffer {
@@ -207,6 +225,7 @@ impl ShellState {
                         for c in input_buffer.chars().take(cursor_position) {
                             print!("{}", c);
                         }
+                        total_len = input_buffer.len();
                     }
                 }
                 // backspace removes one character from the buffer
@@ -224,6 +243,7 @@ impl ShellState {
                         for c in input_buffer.chars().take(cursor_position) {
                             print!("{}", c);
                         }
+                        total_len = input_buffer.len();
                     }
                 }
 
@@ -231,7 +251,8 @@ impl ShellState {
                 _ => {
                     input_buffer.push(charbuf[0] as char);
 
-                    print!("\r╰ ➤ {}", " ".repeat(suggestion.len()));
+                    // Clear currently entered text
+                    print!("\r╰ ➤ {}", " ".repeat(total_len));
                     suggestion.clear();
 
                     // Try to find a suggestion from the contents of the current working directory
@@ -248,6 +269,7 @@ impl ShellState {
                                 let print_this : String = suggestion.chars().skip(last_word.len()).collect();
                                 write!(&mut stdout, "\r╰ ➤ {}{}", " ".repeat(input_buffer.len()), print_this).unwrap();
                                 stdout.reset().unwrap();
+                                total_len = (input_buffer.len() - last_word.len()) + suggestion.len();
                             },
                             None => {
                                 if let Some(histmatch) = self.find_match_history(input_buffer) {
@@ -256,9 +278,13 @@ impl ShellState {
                                     stdout.set_color(ColorSpec::new().set_fg(Some(Color::Magenta))).unwrap();
                                     write!(&mut stdout, "\r╰ ➤ {}", suggestion).unwrap();
                                     stdout.reset().unwrap();
+                                    total_len = suggestion.len();
                                 }
                             }
                         }
+                    }
+                    if suggestion.is_empty() {
+                        total_len += 1;
                     }
                     print_buffer(input_buffer, false);
                     cursor_position += 1;
@@ -269,7 +295,7 @@ impl ShellState {
     }
 
     fn find_match_directory(&self, pattern: &str) -> Option<String> {
-        if let Ok(entries) = fs::read_dir(&self.directory) {
+        if let Ok(entries) = fs::read_dir(&self.variables.get("PWD").unwrap()) {
             for entry in entries.filter_map(|e| e.ok()) {
                 if let Ok(str_name) = entry.file_name().into_string() {
                     if str_name.as_str().starts_with(pattern) {

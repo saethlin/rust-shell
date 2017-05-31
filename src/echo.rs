@@ -3,7 +3,6 @@ extern crate itertools;
 
 use std::iter;
 use self::itertools::Itertools;
-use std::ffi::OsStr;
 use state::ShellState;
 
 impl ShellState {
@@ -18,7 +17,7 @@ impl ShellState {
     fn lookup_envar(&self, arg: &str) -> Option<String> {
         if arg.starts_with('$') {
             let (_, key) = arg.split_at(1);
-            if let Some(val) = self.variables.get(OsStr::new(key)) {
+            if let Some(val) = self.variables.get(key) {
                 return Some(val.to_string_lossy().into_owned());
             }
         }

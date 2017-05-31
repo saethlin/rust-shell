@@ -20,7 +20,7 @@ impl ShellState {
                 continue;
             }
 
-            let mut pattern = self.directory.clone();
+            let mut pattern = self.variables.get("PWD").unwrap().clone();
             pattern.push(arg);
             match glob::glob(pattern.to_str().unwrap()) {
                 Ok(result_iter) => {
@@ -39,7 +39,7 @@ impl ShellState {
         if Path::new(command).is_file() {
             match Command::new(Path::new(command))
                 .args(expanded_args)
-                .current_dir(self.directory.clone())
+                .current_dir(self.variables.get("PWD").unwrap().clone())
                 .spawn() {
                 Ok(mut child) => {
                     child.wait().unwrap();
@@ -50,7 +50,7 @@ impl ShellState {
             return;
         }
 
-        let path = self.variables[&std::ffi::OsString::from("PATH")].clone();
+        let path = self.variables.get("PATH").unwrap().clone();
 
         for entries in path.into_string().unwrap().split(':')
             .map(|dir| fs::read_dir(Path::new(dir)))
@@ -62,7 +62,7 @@ impl ShellState {
                 // Check if entry filename matches
                 match Command::new(dir_entry.path())
                     .args(expanded_args)
-                    .current_dir(self.directory.clone())
+                    .current_dir(self.variables.get("PWD").unwrap().clone())
                     .spawn() {
                     Ok(mut child) => {
                         child.wait().unwrap();
