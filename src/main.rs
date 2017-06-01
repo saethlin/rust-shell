@@ -20,10 +20,13 @@ fn main() {
         history: CircularBuffer::new(10000),
     };
 
-    // login only gives me $HOME, $SHELL, $PATH, $LOGNAME, and $MAIL
-    shell.read_config();
+    // login only gives me $HOME, $SHELL, $PATH, $LOGNAME, and $MAIL, so provide defaults here
+    shell.variables.insert("PROMPT", "PROMPT={BOLD}{WHITE}╭{RED} ➜ {GREEN}{$USER}@{$HOSTNAME}:{CYAN}{$PWD}{WHITE}\n╰ ➤ ");
+    shell.variables.insert("HISTSIZE", "1000");
     shell.variables.insert("USER", "ben");
     shell.variables.insert("HOSTNAME", get_hostname().unwrap().as_ref());
+
+    shell.read_config();
 
     shell.load_history();
 
