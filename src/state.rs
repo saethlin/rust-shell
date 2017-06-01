@@ -7,6 +7,7 @@ use std::str;
 use std::fs;
 use std::io;
 use std::io::{Write, Read};
+use std::io::Error;
 use self::termios::{Termios, TCSANOW, tcsetattr};
 use self::termcolor::{Color, ColorChoice, ColorSpec, WriteColor};
 use circular_buffer::CircularBuffer;
@@ -25,24 +26,31 @@ pub struct PromptState {
 }
 
 impl PromptState {
-    pub fn clear() {
-
+    pub fn clear_suggestion(&self) {
+        print!("{}\r", " ".repeat(self.total_len));
+        print!("{}", self.input_buffer);
     }
 }
 
-fn print_buffer(buf: &str, clear: bool) {
-    if clear {
-        print!("\r    ");
-        print!("{}", " ".repeat(buf.len()+1));
-    }
-    print!("\r╰ ➤ {}", buf);
+fn getchar_raw() -> Result<u8, Error> {
+    let stdin = 0;
+    let old_term = Termios::from_fd(stdin)?;
+    let mut term = Termios::from_fd(stdin)?;
+    termios::cfmakeraw(&mut term);
+    tcsetattr(stdin, TCSANOW, &term)?;
+
+    let mut charbuf = [0; 1];
+    io::stdin().read_exact(&mut charbuf)?;
+    tcsetattr(stdin, TCSANOW, &old_term)?;
+
+    Ok(charbuf[0])
 }
 
 impl ShellState {
 
     pub fn prompt(&self) {
         #![allow(unused)]
-        let  mut stdout = termcolor::StandardStream::stdout(ColorChoice::Auto);
+        let mut stdout = termcolor::StandardStream::stdout(ColorChoice::Auto);
         let mut spec = termcolor::ColorSpec::new();
         let mut buf = String::new();
         let prompt = self.variables.get("PROMPT").unwrap();
@@ -107,39 +115,29 @@ impl ShellState {
     }
 
     pub fn prompt_read(&mut self, input_buffer: &mut String) {
-        let stdin = 0;
-        let old_term = Termios::from_fd(stdin).unwrap();
-        let mut term = Termios::from_fd(stdin).unwrap();
-        termios::cfmakeraw(&mut term);
-        tcsetattr(stdin, TCSANOW, &term).unwrap();
-
         self.prompt();
         input_buffer.clear();
-        let mut charbuf = [0; 1];
         let mut suggestion = String::new();
         let mut cursor_position = 0;
         let mut total_len = 0;
 
         loop {
-            io::stdin().read_exact(&mut charbuf).unwrap();
+            let c = getchar_raw().unwrap();
 
-            match charbuf[0] {
-                // clear line on a ctrl+c
+            match c {
+                // ctrl+c clears suggestion and opens a new line
                 3 => {
-                    if !suggestion.is_empty() {
-                        print!("\r╰ ➤ {}", " ".repeat(total_len));
-                        print!("\r╰ ➤ {}", input_buffer);
-                    }
+                    print!("\r╰ ➤ {}", " ".repeat(total_len));
+                    print!("\r╰ ➤ {}", input_buffer);
                     input_buffer.clear();
-                    println!("\r");
                     self.prompt();
                 },
                 // ctrl+d should close the shell, only if the input buffer is empty
                 4 => {
+                    // TODO: Refactor this into an exit function? We do have at least one other way to exit
                     if input_buffer.is_empty() {
-                        println!('\r');
+                        print!("\n\r");
                         io::stdout().flush().unwrap();
-                        tcsetattr(stdin, TCSANOW, &old_term).unwrap();
                         self.save_history();
                         std::process::exit(0);
                     }
@@ -148,11 +146,10 @@ impl ShellState {
                 9 => {
                     if !suggestion.is_empty() {
                         if let Some(ind) = input_buffer.as_str().rfind(' ') {
-                            input_buffer.truncate(ind);
-                            input_buffer.push(' ');
+                            input_buffer.truncate(ind+1);
                         }
                         input_buffer.push_str(suggestion.as_str());
-                        print_buffer(input_buffer, true);
+                        print!("\r╰ ➤ {}", input_buffer);
                         cursor_position = input_buffer.len();
                         total_len = input_buffer.len();
                     }
@@ -160,30 +157,31 @@ impl ShellState {
                 // return/enter should append the command to history and return to the caller
                 13 => {
                     // Clear any active suggestion
-                    // TODO: Only need to print from cursor position onwards to clear
-                    if !suggestion.is_empty() {
-                        print!("\r╰ ➤ {}", " ".repeat(total_len));
-                        print!("\r╰ ➤ {}", input_buffer);
-                    }
-                    println!("\r");
+                    print!("\r╰ ➤ {}", " ".repeat(total_len));
+                    print!("\r╰ ➤ {}", input_buffer);
+                    print!("\n\r");
+                    // Append to history if not a duplicate of the last entry
                     if self.history.tail().unwrap_or(&"".to_owned()) != input_buffer {
                         self.history.push(input_buffer.to_owned());
                     }
-                    tcsetattr(stdin, TCSANOW, &old_term).unwrap();
                     return;
                 },
                 // Escape character indicates an arrow key
                 27 => {
-                    io::stdin().read_exact(&mut charbuf).unwrap();
-                    io::stdin().read_exact(&mut charbuf).unwrap();
-                    match charbuf[0] {
+                    getchar_raw().unwrap();
+                    let c = getchar_raw().unwrap();
+                    match c {
+                        // Up and down should move through the history but instantly be reset by any other command
                         // Up access last entry
                         65 => {
                             if input_buffer.is_empty() {
+                                suggestion.clear();
                                 input_buffer.clear();
                                 input_buffer.push_str(self.history.head().unwrap_or(&"".to_owned()));
-                                print_buffer(input_buffer, true);
+                                print!("\r╰ ➤ {}", " ".repeat(total_len));
+                                print!("\r╰ ➤ {}", input_buffer);
                                 cursor_position = input_buffer.len();
+                                total_len = input_buffer.len();
                             }
                         },
                         // Down
@@ -249,7 +247,7 @@ impl ShellState {
 
                 // Everything else is a printable symbol and gets added to the input buffer
                 _ => {
-                    input_buffer.push(charbuf[0] as char);
+                    input_buffer.push(c as char);
 
                     // Clear currently entered text
                     print!("\r╰ ➤ {}", " ".repeat(total_len));
@@ -286,7 +284,8 @@ impl ShellState {
                     if suggestion.is_empty() {
                         total_len += 1;
                     }
-                    print_buffer(input_buffer, false);
+                    print!("\r╰ ➤ ");
+                    print!("{}", input_buffer);
                     cursor_position += 1;
                 },
             }

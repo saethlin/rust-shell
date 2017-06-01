@@ -5,8 +5,6 @@ extern crate rust_shell as shell;
 use std::io;
 use std::io::Write;
 use std::str;
-use std::ffi::OsStr;
-use std::path::Path;
 use hostname::get_hostname;
 use shell::state::ShellState;
 use shell::circular_buffer::CircularBuffer;
@@ -14,7 +12,6 @@ use shell::envars::Envars;
 
 fn main() {
     // TODO: Factor out more helper functions
-    // TODO: Read some config file to get things like the home directory
     // TODO: Semicolons between commands on a single line
     // TODO: Pipes and output redirection
     // TODO: Syntax highlighting
@@ -23,15 +20,10 @@ fn main() {
         history: CircularBuffer::new(10000),
     };
 
-    shell.variables.insert("SHELL", "rsh");
-
-    let home = shell.variables.get("HOME").unwrap().to_owned();
-    let hist_loc = Path::new(&home).join(Path::new(OsStr::new(".rsh_history")));
-    shell.variables.insert("HISTFILE", hist_loc.to_string_lossy().as_ref());
-    shell.variables.insert("HISTSIZE", "10000");
+    // login only gives me $HOME, $SHELL, $PATH, $LOGNAME, and $MAIL
+    shell.read_config();
+    shell.variables.insert("USER", "ben");
     shell.variables.insert("HOSTNAME", get_hostname().unwrap().as_ref());
-
-    shell.variables.insert("PROMPT", "{BOLD}{WHITE}╭{RED} ➜ {GREEN}{$USER}@{$HOSTNAME}:{CYAN}{$PWD}{WHITE}\n╰ ➤ ");
 
     shell.load_history();
 

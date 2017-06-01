@@ -5,3 +5,4 @@ pub mod circular_buffer;
 pub mod history;
 pub mod run_command;
 pub mod envars;
+pub mod read_config;
