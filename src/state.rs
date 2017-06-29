@@ -47,7 +47,6 @@ fn getchar_raw() -> Result<u8, Error> {
 }
 
 impl ShellState {
-
     pub fn prompt(&self) {
         #![allow(unused)]
         let mut stdout = termcolor::StandardStream::stdout(ColorChoice::Auto);
@@ -67,8 +66,7 @@ impl ShellState {
                         if let Some(val) = self.variables.get(key) {
                             write!(&mut stdout, "{}", val.to_string_lossy());
                         }
-                    }
-                    else {
+                    } else {
                         match buf.as_ref() {
                             "BOLD" => {
                                 spec.set_bold(true);
@@ -90,7 +88,7 @@ impl ShellState {
                                 spec.set_fg(Some(Color::Cyan));
                                 stdout.set_color(&spec);
                             }
-                            _ => {},
+                            _ => {}
                         };
                     }
                     in_braces = false;
@@ -98,13 +96,12 @@ impl ShellState {
 
                 }
                 '\n' => {
-                    {write!(&mut stdout, "\n\r");}
+                    write!(&mut stdout, "\n\r");
                 }
                 _ => {
                     if in_braces {
                         buf.push(c);
-                    }
-                    else {
+                    } else {
                         write!(&mut stdout, "{}", c);
                     }
                 }
@@ -131,7 +128,7 @@ impl ShellState {
                     print!("\r╰ ➤ {}", input_buffer);
                     input_buffer.clear();
                     self.prompt();
-                },
+                }
                 // ctrl+d should close the shell, only if the input buffer is empty
                 4 => {
                     // TODO: Refactor this into an exit function? We do have at least one other way to exit
@@ -146,7 +143,7 @@ impl ShellState {
                 9 => {
                     if !suggestion.is_empty() {
                         if let Some(ind) = input_buffer.as_str().rfind(' ') {
-                            input_buffer.truncate(ind+1);
+                            input_buffer.truncate(ind + 1);
                         }
                         input_buffer.push_str(suggestion.as_str());
                         print!("\r╰ ➤ {}", input_buffer);
@@ -165,7 +162,7 @@ impl ShellState {
                         self.history.push(input_buffer.to_owned());
                     }
                     return;
-                },
+                }
                 // Escape character indicates an arrow key
                 27 => {
                     getchar_raw().unwrap();
@@ -177,13 +174,15 @@ impl ShellState {
                             if input_buffer.is_empty() {
                                 suggestion.clear();
                                 input_buffer.clear();
-                                input_buffer.push_str(self.history.head().unwrap_or(&"".to_owned()));
+                                input_buffer.push_str(
+                                    self.history.head().unwrap_or(&"".to_owned()),
+                                );
                                 print!("\r╰ ➤ {}", " ".repeat(total_len));
                                 print!("\r╰ ➤ {}", input_buffer);
                                 cursor_position = input_buffer.len();
                                 total_len = input_buffer.len();
                             }
-                        },
+                        }
                         // Down
                         //66 => { },
                         // Right
@@ -191,7 +190,10 @@ impl ShellState {
                             if cursor_position < input_buffer.len() {
                                 cursor_position += 1;
                                 print!("\r╰ ➤ ");
-                                for c in input_buffer.chars().chain(iter::once(' ')).take(cursor_position) {
+                                for c in input_buffer.chars().chain(iter::once(' ')).take(
+                                    cursor_position,
+                                )
+                                {
                                     print!("{}", c);
                                 }
                             }
@@ -206,7 +208,7 @@ impl ShellState {
                                 }
                             }
                         }
-                        _ => {},
+                        _ => {}
                     }
                 }
                 // del, which is the same char as a tilde. // TODO: figure out how to detect modifier keys
@@ -228,14 +230,15 @@ impl ShellState {
                 }
                 // backspace removes one character from the buffer
                 127 => {
-                    if cursor_position > 0 { // And input_buffer is not empty, but that should be enforced by the other rules on the cursor
+                    if cursor_position > 0 {
+                        // And input_buffer is not empty, but that should be enforced by the other rules on the cursor
 
                         // Purge any currently printed suggestion
                         if !suggestion.is_empty() {
-                            print!("\r╰ ➤ {}", " ".repeat(suggestion.len()));
+                            print!("\r╰ ➤ {}", " ".repeat(total_len));
                         }
 
-                        input_buffer.remove(cursor_position-1);
+                        input_buffer.remove(cursor_position - 1);
                         cursor_position -= 1;
                         print!("\r╰ ➤ {} \r╰ ➤ ", input_buffer);
                         for c in input_buffer.chars().take(cursor_position) {
@@ -262,18 +265,32 @@ impl ShellState {
                         match self.find_match_directory(last_word) {
                             Some(dirmatch) => {
                                 suggestion.push_str(dirmatch.as_str());
-                                let mut stdout = termcolor::StandardStream::stdout(termcolor::ColorChoice::Auto);
-                                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Magenta))).unwrap();
-                                let print_this : String = suggestion.chars().skip(last_word.len()).collect();
-                                write!(&mut stdout, "\r╰ ➤ {}{}", " ".repeat(input_buffer.len()), print_this).unwrap();
+                                let mut stdout =
+                                    termcolor::StandardStream::stdout(termcolor::ColorChoice::Auto);
+                                stdout
+                                    .set_color(ColorSpec::new().set_fg(Some(Color::Magenta)))
+                                    .unwrap();
+                                let print_this: String =
+                                    suggestion.chars().skip(last_word.len()).collect();
+                                write!(
+                                    &mut stdout,
+                                    "\r╰ ➤ {}{}",
+                                    " ".repeat(input_buffer.len()),
+                                    print_this
+                                ).unwrap();
                                 stdout.reset().unwrap();
-                                total_len = (input_buffer.len() - last_word.len()) + suggestion.len();
-                            },
+                                total_len = (input_buffer.len() - last_word.len()) +
+                                    suggestion.len();
+                            }
                             None => {
                                 if let Some(histmatch) = self.find_match_history(input_buffer) {
                                     suggestion.push_str(&histmatch);
-                                    let mut stdout = termcolor::StandardStream::stdout(termcolor::ColorChoice::Auto);
-                                    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Magenta))).unwrap();
+                                    let mut stdout = termcolor::StandardStream::stdout(
+                                        termcolor::ColorChoice::Auto,
+                                    );
+                                    stdout
+                                        .set_color(ColorSpec::new().set_fg(Some(Color::Magenta)))
+                                        .unwrap();
                                     write!(&mut stdout, "\r╰ ➤ {}", suggestion).unwrap();
                                     stdout.reset().unwrap();
                                     total_len = suggestion.len();
@@ -287,7 +304,7 @@ impl ShellState {
                     print!("\r╰ ➤ ");
                     print!("{}", input_buffer);
                     cursor_position += 1;
-                },
+                }
             }
             io::stdout().flush().unwrap(); // Always flush after getting input
         }

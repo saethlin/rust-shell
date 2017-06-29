@@ -6,14 +6,12 @@ use std::env;
 
 #[derive(Default)]
 pub struct Envars {
-    map: HashMap<std::ffi::OsString, std::ffi::OsString>
+    map: HashMap<std::ffi::OsString, std::ffi::OsString>,
 }
 
 impl Envars {
     pub fn load() -> Self {
-        let mut this = Envars {
-            map: HashMap::new()
-        };
+        let mut this = Envars { map: HashMap::new() };
         for (key, value) in env::vars_os() {
             this.map.insert(key, value);
         }

@@ -21,13 +21,25 @@ fn main() {
     };
 
     // login only gives me $HOME, $SHELL, $PATH, $LOGNAME, and $MAIL, so provide defaults here
-    shell.variables.insert("PROMPT", "{BOLD}{WHITE}╭{RED} ➜ {GREEN}{$USER}@{$HOSTNAME}:{CYAN}{$PWD}{WHITE}\n╰ ➤ ");
+    shell.variables.insert(
+        "PROMPT",
+        "{BOLD}{WHITE}╭{RED} ➜ {GREEN}{$USER}@{$HOSTNAME}:{CYAN}{$PWD}{WHITE}\n╰ ➤ ",
+    );
     shell.variables.insert("HISTSIZE", "1000");
-    shell.variables.insert("HOSTNAME", get_hostname().unwrap().as_ref());
+    shell.variables.insert(
+        "HOSTNAME",
+        get_hostname().unwrap().as_ref(),
+    );
     let username = shell.variables.get("LOGNAME").unwrap().clone();
-    shell.variables.insert("USER", username.to_string_lossy().as_ref());
+    shell.variables.insert(
+        "USER",
+        username.to_string_lossy().as_ref(),
+    );
     let home = shell.variables.get("HOME").unwrap().clone();
-    shell.variables.insert("PWD", home.to_string_lossy().as_ref());
+    shell.variables.insert(
+        "PWD",
+        home.to_string_lossy().as_ref(),
+    );
 
     shell.read_config();
 
@@ -47,9 +59,9 @@ fn main() {
                 io::stdout().flush().unwrap();
                 shell.save_history();
                 std::process::exit(0)
-            },
+            }
             "history" => shell.print_history(),
-            _ => shell.run_command(&cmd, args)
+            _ => shell.run_command(&cmd, args),
         };
     }
 }

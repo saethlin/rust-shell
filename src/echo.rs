@@ -8,9 +8,12 @@ use state::ShellState;
 impl ShellState {
     pub fn echo(&self, args: std::str::SplitWhitespace) {
         let vars = args.map(|a| self.lookup_envar(a).unwrap_or_else(|| a.to_owned()));
-        for entry in iter::repeat(" ".to_owned()).interleave_shortest(vars).skip(1) {
+        for entry in iter::repeat(" ".to_owned())
+            .interleave_shortest(vars)
+            .skip(1)
+        {
             print!("{}", entry)
-        };
+        }
         println!();
     }
 

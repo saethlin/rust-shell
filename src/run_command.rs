@@ -27,7 +27,7 @@ impl ShellState {
                     for entry in result_iter.filter_map(|e| e.ok()) {
                         expanded_args.push(entry.as_os_str().to_owned());
                     }
-                },
+                }
                 Err(..) => expanded_args.push(OsString::from(arg)),
             }
         }
@@ -52,13 +52,17 @@ impl ShellState {
 
         let path = self.variables.get("PATH").unwrap().clone();
 
-        for entries in path.into_string().unwrap().split(':')
+        for entries in path.into_string()
+            .unwrap()
+            .split(':')
             .map(|dir| fs::read_dir(Path::new(dir)))
-            .filter_map(|e| e.ok()) {
+            .filter_map(|e| e.ok())
+        {
             // loop over the iterator of every directory in PATH that's possible to read
             for dir_entry in entries
                 .filter_map(|e| e.ok()) // Only entries that are ok
-                .filter(|e| &e.file_name() == command) {
+                .filter(|e| &e.file_name() == command)
+            {
                 // Check if entry filename matches
                 match Command::new(dir_entry.path())
                     .args(expanded_args)

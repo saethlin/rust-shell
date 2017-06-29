@@ -7,9 +7,12 @@ use std::path::Path;
 impl ShellState {
     pub fn read_config(&mut self) {
         let config_path = Path::new(self.variables.get("HOME").unwrap()).join(Path::new(".rshrc"));
-        if let Ok(f) =  std::fs::File::open(config_path) {
+        if let Ok(f) = std::fs::File::open(config_path) {
             let reader = BufReader::new(f);
-            for line in reader.lines().filter_map(|l| l.ok()).filter(|l| l.contains('=')) {
+            for line in reader.lines().filter_map(|l| l.ok()).filter(
+                |l| l.contains('='),
+            )
+            {
                 let mut split = line.as_str().split('=');
                 let key = split.next().unwrap();
                 let value = split.next().unwrap_or("").to_owned();
